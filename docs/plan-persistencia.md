@@ -27,11 +27,15 @@ Proyectos, tareas, filtros, `due_at`, skills, hooks y CI.
   probados en ambos sentidos; tests de persistencia contra PostgreSQL, nunca
   SQLite; capacidad nueva empieza con test que falla.
 
-## Decisión abierta
+## Decisiones tomadas
 
-Driver y capa de acceso. Propuesta: acceso **async** con SQLAlchemy 2.x y
-`asyncpg`, coherente con la app async y los tests async del repo. Se confirma en
-el incremento 1.
+Driver y capa de acceso: acceso **async** con SQLAlchemy 2.x y `asyncpg`. Se
+aplica desde el incremento 1.
+
+Por qué encaja con lo que ya existe: la app FastAPI y el único test
+(`tests/test_health.py`, async sin decorador con `asyncio_mode = "auto"` y
+`httpx.ASGITransport`) ya son async, así que una capa de acceso async no
+introduce un modelo de ejecución distinto al del repositorio.
 
 ## Incrementos
 
