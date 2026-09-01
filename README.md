@@ -44,7 +44,23 @@ El servicio `db` (PostgreSQL 18-alpine) queda disponible cuando su healthcheck
 pasa a `healthy`. `compose.yaml` trae valores por defecto locales, así que
 funciona sin `.env`. Para personalizarlo, copia `.env.example` a `.env`.
 
-### 5. Arrancar la API
+### 5. Aplicar las migraciones
+
+Con PostgreSQL levantado:
+
+```bash
+uv run alembic upgrade head
+```
+
+Para revertir al estado inicial:
+
+```bash
+uv run alembic downgrade base
+```
+
+La URL de conexión se toma de `DATABASE_URL` (ver `.env.example`).
+
+### 6. Arrancar la API
 
 ```bash
 uv run uvicorn app.main:app --reload
@@ -57,7 +73,7 @@ curl http://127.0.0.1:8000/health
 # {"status":"ok"}
 ```
 
-### 6. Detener PostgreSQL
+### 7. Detener PostgreSQL
 
 ```bash
 docker compose down
