@@ -297,3 +297,53 @@ async def test_patch_task_inexistente_devuelve_404(
     response = await client.patch("/tasks/999999", json={"title": "Depa"})
 
     assert response.status_code == 404
+
+
+async def test_delete_task_existente_devuelve_204_y_luego_404(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+    creada = (
+        await client.post(
+            "/tasks",
+            json={"title": "Tarea", "project_id": project_id, "state_id": state_id},
+        )
+    ).json()
+
+    response = await client.delete(f"/tasks/{creada['id']}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+    posterior = await client.get(f"/tasks/{creada['id']}")
+    assert posterior.status_code == 404
+
+
+async def test_delete_task_deja_el_proyecto_borrable_si_era_su_unica_tarea(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+    tarea_id = (
+        await client.post(
+            "/tasks",
+            json={"title": "Tarea", "project_id": project_id, "state_id": state_id},
+        )
+    ).json()["id"]
+
+    bloqueado = await client.delete(f"/projects/{project_id}")
+    assert bloqueado.status_code == 409
+
+    await client.delete(f"/tasks/{tarea_id}")
+
+    liberado = await client.delete(f"/projects/{project_id}")
+    assert liberado.status_code == 204
+
+
+async def test_delete_task_inexistente_devuelve_404(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.delete("/tasks/999999")
+
+    assert response.status_code == 404

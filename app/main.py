@@ -152,3 +152,12 @@ async def update_task(task_id: int, payload: TaskUpdate, session: SessionDep) ->
     await session.commit()
     await session.refresh(task)
     return task
+
+
+@app.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_task(task_id: int, session: SessionDep) -> None:
+    task = await session.get(Task, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="tarea no encontrada")
+    await session.delete(task)
+    await session.commit()
