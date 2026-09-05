@@ -17,6 +17,14 @@ de base de datos sustituida por un engine creado y desechado dentro del test:
 el engine global de `app.db` guarda conexiones atadas a un event loop, y
 pytest-asyncio usa un loop por test.
 
+Proyectos es el primer recurso mutable (a diferencia de `states`, un catálogo
+de solo lectura sembrado por migración), así que cada test corre dentro de su
+propia transacción de PostgreSQL, revertida al terminar: la sesión de la app
+se liga a una única `Connection` con `join_transaction_mode="create_savepoint"`
+(SQLAlchemy >= 2.0.19), de modo que un `commit()` dentro del endpoint abre un
+SAVEPOINT en vez de confirmar de verdad. Así las filas que crea un test no
+quedan visibles para el siguiente dentro de la misma sesión de tests.
+
 Requisito: `docker compose up -d` con el servicio `db` sano.
 """
 
@@ -52,8 +60,13 @@ def migrated_db():
 @pytest.fixture
 async def client(migrated_db) -> AsyncIterator[httpx.AsyncClient]:
     engine = create_async_engine(DATABASE_URL)
+    conn = await engine.connect()
+    trans = await conn.begin()
     sessionmaker = async_sessionmaker(
-        engine, expire_on_commit=False, class_=AsyncSession
+        bind=conn,
+        expire_on_commit=False,
+        class_=AsyncSession,
+        join_transaction_mode="create_savepoint",
     )
 
     async def _get_session() -> AsyncIterator[AsyncSession]:
@@ -69,4 +82,6 @@ async def client(migrated_db) -> AsyncIterator[httpx.AsyncClient]:
             yield c
     finally:
         app.dependency_overrides.pop(get_session, None)
+        await trans.rollback()
+        await conn.close()
         await engine.dispose()
