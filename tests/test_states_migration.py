@@ -65,9 +65,12 @@ async def test_reejecutar_el_seed_no_cambia_el_conteo(migrated_db):
 
 async def test_downgrade_deja_la_tabla_ausente(migrated_db):
     cfg = alembic_config()
+    # Revisión anterior a la de states, no "-1": la cabeza puede tener
+    # revisiones posteriores (p. ej. projects) apiladas encima.
+    objetivo = _states_revision_module().down_revision
     # Los comandos de Alembic corren su propio event loop (env.py async), así
     # que se ejecutan en un hilo aparte para no chocar con el loop del test.
-    await asyncio.to_thread(command.downgrade, cfg, "-1")
+    await asyncio.to_thread(command.downgrade, cfg, objetivo)
     engine = create_async_engine(DATABASE_URL)
     try:
         async with engine.connect() as conn:
