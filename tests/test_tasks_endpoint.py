@@ -186,3 +186,114 @@ async def test_get_task_inexistente_devuelve_404(client: httpx.AsyncClient) -> N
 
     assert response.status_code == 404
     assert "detail" in response.json()
+
+
+async def test_patch_task_solo_title_conserva_el_resto(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+    creada = (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Original",
+                "description": "algo",
+                "project_id": project_id,
+                "state_id": state_id,
+            },
+        )
+    ).json()
+
+    response = await client.patch(
+        f"/tasks/{creada['id']}", json={"title": "Actualizada"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["title"] == "Actualizada"
+    assert body["description"] == "algo"
+    assert body["project_id"] == project_id
+    assert body["state_id"] == state_id
+
+
+async def test_patch_task_con_title_vacio_devuelve_422(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+    creada = (
+        await client.post(
+            "/tasks",
+            json={"title": "Original", "project_id": project_id, "state_id": state_id},
+        )
+    ).json()
+
+    response = await client.patch(f"/tasks/{creada['id']}", json={"title": ""})
+
+    assert response.status_code == 422
+
+
+async def test_patch_task_con_title_null_devuelve_422(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+    creada = (
+        await client.post(
+            "/tasks",
+            json={"title": "Original", "project_id": project_id, "state_id": state_id},
+        )
+    ).json()
+
+    response = await client.patch(f"/tasks/{creada['id']}", json={"title": None})
+
+    assert response.status_code == 422
+
+
+async def test_patch_task_con_project_id_inexistente_devuelve_404_y_no_cambia(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+    creada = (
+        await client.post(
+            "/tasks",
+            json={"title": "Original", "project_id": project_id, "state_id": state_id},
+        )
+    ).json()
+
+    response = await client.patch(
+        f"/tasks/{creada['id']}", json={"project_id": 999999}
+    )
+
+    assert response.status_code == 404
+    sin_cambios = (await client.get(f"/tasks/{creada['id']}")).json()
+    assert sin_cambios["project_id"] == project_id
+
+
+async def test_patch_task_con_state_id_inexistente_devuelve_404_y_no_cambia(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+    creada = (
+        await client.post(
+            "/tasks",
+            json={"title": "Original", "project_id": project_id, "state_id": state_id},
+        )
+    ).json()
+
+    response = await client.patch(f"/tasks/{creada['id']}", json={"state_id": 999999})
+
+    assert response.status_code == 404
+    sin_cambios = (await client.get(f"/tasks/{creada['id']}")).json()
+    assert sin_cambios["state_id"] == state_id
+
+
+async def test_patch_task_inexistente_devuelve_404(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.patch("/tasks/999999", json={"title": "Depa"})
+
+    assert response.status_code == 404

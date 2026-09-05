@@ -14,6 +14,7 @@ from app.schemas import (
     StateOut,
     TaskCreate,
     TaskOut,
+    TaskUpdate,
 )
 
 app = FastAPI(title="TaskFlow API")
@@ -131,4 +132,23 @@ async def get_task(task_id: int, session: SessionDep) -> Task:
     task = await session.get(Task, task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="tarea no encontrada")
+    return task
+
+
+@app.patch("/tasks/{task_id}", response_model=TaskOut)
+async def update_task(task_id: int, payload: TaskUpdate, session: SessionDep) -> Task:
+    task = await session.get(Task, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="tarea no encontrada")
+    changes = payload.model_dump(exclude_unset=True)
+    if "project_id" in changes:
+        if await session.get(Project, changes["project_id"]) is None:
+            raise HTTPException(status_code=404, detail="proyecto no encontrado")
+    if "state_id" in changes:
+        if await session.get(State, changes["state_id"]) is None:
+            raise HTTPException(status_code=404, detail="estado no encontrado")
+    for field, value in changes.items():
+        setattr(task, field, value)
+    await session.commit()
+    await session.refresh(task)
     return task

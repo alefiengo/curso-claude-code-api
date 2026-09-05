@@ -62,6 +62,36 @@ class TaskCreate(BaseModel):
         return _normalizar_title(value)
 
 
+class TaskUpdate(BaseModel):
+    # `title`, `project_id` y `state_id` son obligatorios en `Task` (a
+    # diferencia de `description`): si se envían, no pueden ser `null`.
+    title: str | None = None
+    description: str | None = None
+    project_id: int | None = None
+    state_id: int | None = None
+
+    @field_validator("title")
+    @classmethod
+    def _validar_title(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("el título no puede ser nulo")
+        return _normalizar_title(value)
+
+    @field_validator("project_id")
+    @classmethod
+    def _validar_project_id(cls, value: int | None) -> int:
+        if value is None:
+            raise ValueError("project_id no puede ser nulo")
+        return value
+
+    @field_validator("state_id")
+    @classmethod
+    def _validar_state_id(cls, value: int | None) -> int:
+        if value is None:
+            raise ValueError("state_id no puede ser nulo")
+        return value
+
+
 class TaskOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
