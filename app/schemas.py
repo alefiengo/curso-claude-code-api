@@ -19,6 +19,11 @@ class ProjectCreate(BaseModel):
     description: str | None = None
 
 
+class ProjectUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+
+
 class ProjectOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 

@@ -77,3 +77,57 @@ async def test_get_project_inexistente_devuelve_404(
 
     assert response.status_code == 404
     assert "detail" in response.json()
+
+
+async def test_patch_project_solo_name_conserva_description(
+    client: httpx.AsyncClient,
+) -> None:
+    creado = (
+        await client.post(
+            "/projects", json={"name": "Casa", "description": "Tareas del hogar"}
+        )
+    ).json()
+
+    response = await client.patch(f"/projects/{creado['id']}", json={"name": "Depa"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "Depa"
+    assert body["description"] == "Tareas del hogar"
+
+
+async def test_patch_project_description_null_explicito_la_limpia(
+    client: httpx.AsyncClient,
+) -> None:
+    creado = (
+        await client.post(
+            "/projects", json={"name": "Casa", "description": "Tareas del hogar"}
+        )
+    ).json()
+
+    response = await client.patch(
+        f"/projects/{creado['id']}", json={"description": None}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "Casa"
+    assert body["description"] is None
+
+
+async def test_patch_project_con_name_vacio_devuelve_422(
+    client: httpx.AsyncClient,
+) -> None:
+    creado = (await client.post("/projects", json={"name": "Casa"})).json()
+
+    response = await client.patch(f"/projects/{creado['id']}", json={"name": ""})
+
+    assert response.status_code == 422
+
+
+async def test_patch_project_inexistente_devuelve_404(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.patch("/projects/999999", json={"name": "Depa"})
+
+    assert response.status_code == 404

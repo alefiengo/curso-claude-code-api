@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import async_session
 from app.models import Project, State
-from app.schemas import ProjectCreate, ProjectOut, StateOut
+from app.schemas import ProjectCreate, ProjectOut, ProjectUpdate, StateOut
 
 app = FastAPI(title="TaskFlow API")
 
@@ -53,4 +53,18 @@ async def get_project(project_id: int, session: SessionDep) -> Project:
     project = await session.get(Project, project_id)
     if project is None:
         raise HTTPException(status_code=404, detail="proyecto no encontrado")
+    return project
+
+
+@app.patch("/projects/{project_id}", response_model=ProjectOut)
+async def update_project(
+    project_id: int, payload: ProjectUpdate, session: SessionDep
+) -> Project:
+    project = await session.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="proyecto no encontrado")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(project, field, value)
+    await session.commit()
+    await session.refresh(project)
     return project
