@@ -68,3 +68,14 @@ async def update_project(
     await session.commit()
     await session.refresh(project)
     return project
+
+
+@app.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project(project_id: int, session: SessionDep) -> None:
+    # Sin comprobación de tareas asociadas: `tasks` no existe todavía en este
+    # repositorio (ver docs/plan-projects.md, "Fuera de alcance").
+    project = await session.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="proyecto no encontrado")
+    await session.delete(project)
+    await session.commit()

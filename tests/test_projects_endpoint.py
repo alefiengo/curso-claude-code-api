@@ -131,3 +131,25 @@ async def test_patch_project_inexistente_devuelve_404(
     response = await client.patch("/projects/999999", json={"name": "Depa"})
 
     assert response.status_code == 404
+
+
+async def test_delete_project_existente_devuelve_204_y_luego_404(
+    client: httpx.AsyncClient,
+) -> None:
+    creado = (await client.post("/projects", json={"name": "Casa"})).json()
+
+    response = await client.delete(f"/projects/{creado['id']}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+    posterior = await client.get(f"/projects/{creado['id']}")
+    assert posterior.status_code == 404
+
+
+async def test_delete_project_inexistente_devuelve_404(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.delete("/projects/999999")
+
+    assert response.status_code == 404
