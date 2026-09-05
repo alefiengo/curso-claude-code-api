@@ -4,7 +4,25 @@ Salida estricta: exactamente los campos que declara el contrato
 (`docs/contrato-api.md`, sección Esquemas de Respuesta), ni uno más.
 """
 
-from pydantic import BaseModel, ConfigDict, Field
+import unicodedata
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# Categorías Unicode "invisibles": si un título no deja ningún carácter fuera
+# de estas, se considera sin contenido visible (docs/contrato-api.md,
+# "Normalización de texto").
+_CATEGORIAS_INVISIBLES = {"Cc", "Cf", "Zl", "Zp", "Zs"}
+
+
+def _normalizar_title(value: str) -> str:
+    """Recorta los extremos y rechaza un título sin ningún carácter visible.
+
+    No basta con `strip()`: hay invisibles (p. ej. U+200B) que lo atraviesan.
+    """
+    value = value.strip()
+    if all(unicodedata.category(ch) in _CATEGORIAS_INVISIBLES for ch in value):
+        raise ValueError("el título no tiene ningún carácter visible")
+    return value
 
 
 class StateOut(BaseModel):
@@ -30,3 +48,25 @@ class ProjectOut(BaseModel):
     id: int
     name: str
     description: str | None
+
+
+class TaskCreate(BaseModel):
+    title: str
+    description: str | None = None
+    project_id: int
+    state_id: int
+
+    @field_validator("title")
+    @classmethod
+    def _validar_title(cls, value: str) -> str:
+        return _normalizar_title(value)
+
+
+class TaskOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    id: int
+    title: str
+    description: str | None
+    project_id: int
+    state_id: int
