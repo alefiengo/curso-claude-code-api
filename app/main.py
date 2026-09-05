@@ -82,6 +82,13 @@ async def delete_project(project_id: int, session: SessionDep) -> None:
     project = await session.get(Project, project_id)
     if project is None:
         raise HTTPException(status_code=404, detail="proyecto no encontrado")
+    tiene_tareas = await session.scalar(
+        select(Task.id).where(Task.project_id == project_id).limit(1)
+    )
+    if tiene_tareas is not None:
+        raise HTTPException(
+            status_code=409, detail="el proyecto tiene tareas asociadas"
+        )
     await session.delete(project)
     await session.commit()
 

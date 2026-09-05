@@ -153,3 +153,22 @@ async def test_delete_project_inexistente_devuelve_404(
     response = await client.delete("/projects/999999")
 
     assert response.status_code == 404
+
+
+async def test_delete_project_con_tareas_devuelve_409_y_no_borra(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = (await client.post("/projects", json={"name": "Casa"})).json()["id"]
+    state_id = (await client.get("/states")).json()[0]["id"]
+    await client.post(
+        "/tasks",
+        json={"title": "Tarea", "project_id": project_id, "state_id": state_id},
+    )
+
+    response = await client.delete(f"/projects/{project_id}")
+
+    assert response.status_code == 409
+    assert "detail" in response.json()
+
+    posterior = await client.get(f"/projects/{project_id}")
+    assert posterior.status_code == 200
