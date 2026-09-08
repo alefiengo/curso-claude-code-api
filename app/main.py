@@ -107,6 +107,7 @@ async def create_task(payload: TaskCreate, session: SessionDep) -> Task:
         project_id=payload.project_id,
         state_id=payload.state_id,
         due_at=payload.due_at,
+        priority=payload.priority,
     )
     session.add(task)
     await session.commit()
