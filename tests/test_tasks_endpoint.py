@@ -24,6 +24,11 @@ async def _primer_state_id(client: httpx.AsyncClient) -> int:
     return (await client.get("/states")).json()[0]["id"]
 
 
+async def _state_id_por_code(client: httpx.AsyncClient, code: str) -> int:
+    estados = (await client.get("/states")).json()
+    return next(e["id"] for e in estados if e["code"] == code)
+
+
 async def test_post_tasks_valida_devuelve_201_con_esquema_exacto(
     client: httpx.AsyncClient,
 ) -> None:
@@ -438,3 +443,98 @@ async def test_patch_task_con_due_at_null_lo_limpia(
 
     assert response.status_code == 200
     assert response.json()["due_at"] is None
+
+
+async def test_get_tasks_overdue_incluye_solo_vencidas_y_no_hechas(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    pendiente_id = await _state_id_por_code(client, "PENDIENTE")
+    hecha_id = await _state_id_por_code(client, "HECHA")
+
+    vencida = (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Vencida",
+                "project_id": project_id,
+                "state_id": pendiente_id,
+                "due_at": "2020-01-01T00:00:00Z",
+            },
+        )
+    ).json()["id"]
+    futura = (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Futura",
+                "project_id": project_id,
+                "state_id": pendiente_id,
+                "due_at": "2099-01-01T00:00:00Z",
+            },
+        )
+    ).json()["id"]
+    vencida_pero_hecha = (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Vencida pero hecha",
+                "project_id": project_id,
+                "state_id": hecha_id,
+                "due_at": "2020-01-01T00:00:00Z",
+            },
+        )
+    ).json()["id"]
+    sin_fecha = (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Sin fecha",
+                "project_id": project_id,
+                "state_id": pendiente_id,
+            },
+        )
+    ).json()["id"]
+
+    response = await client.get("/tasks?overdue=true")
+
+    assert response.status_code == 200
+    ids_creados = {vencida, futura, vencida_pero_hecha, sin_fecha}
+    ids_overdue = {t["id"] for t in response.json() if t["id"] in ids_creados}
+    assert ids_overdue == {vencida}
+
+
+async def test_get_tasks_overdue_se_combina_con_project_id(
+    client: httpx.AsyncClient,
+) -> None:
+    project_a = await _crear_project(client, "A")
+    project_b = await _crear_project(client, "B")
+    pendiente_id = await _state_id_por_code(client, "PENDIENTE")
+
+    vencida_a = (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Vencida A",
+                "project_id": project_a,
+                "state_id": pendiente_id,
+                "due_at": "2020-01-01T00:00:00Z",
+            },
+        )
+    ).json()["id"]
+    (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Vencida B",
+                "project_id": project_b,
+                "state_id": pendiente_id,
+                "due_at": "2020-01-01T00:00:00Z",
+            },
+        )
+    ).json()["id"]
+
+    response = await client.get(f"/tasks?overdue=true&project_id={project_a}")
+
+    assert response.status_code == 200
+    assert [t["id"] for t in response.json()] == [vencida_a]
