@@ -1,4 +1,4 @@
-"""Tests de la migración de la tabla `tasks` (Tareas v1, sin `due_at`).
+"""Tests de la migración de la tabla `tasks` (Tareas v1 y v2 `due_at`).
 
 Corren contra PostgreSQL (compose.yaml). Como `projects`, sin seed: solo se
 verifica el esquema.
@@ -24,7 +24,16 @@ def _tasks_v1_revision_module():
     raise AssertionError("no se encontró la revisión que crea tasks")
 
 
-async def test_upgrade_head_crea_tasks_con_las_columnas_esperadas(migrated_db):
+def _tasks_v2_revision_module():
+    """Carga el módulo de la revisión que agrega `due_at` a `tasks`."""
+    script = ScriptDirectory.from_config(alembic_config())
+    for rev in script.walk_revisions():
+        if "agrega due_at a tasks" in (rev.doc or "").lower():
+            return rev.module
+    raise AssertionError("no se encontró la revisión que agrega due_at")
+
+
+async def _columnas_y_fks_de_tasks() -> tuple[dict[str, str], dict[str, str]]:
     engine = create_async_engine(DATABASE_URL)
     try:
         async with engine.connect() as conn:
@@ -51,6 +60,21 @@ async def test_upgrade_head_crea_tasks_con_las_columnas_esperadas(migrated_db):
             foreign_keys = {row.column_name: row.referenced_table for row in result}
     finally:
         await engine.dispose()
+    return columns, foreign_keys
+
+
+async def test_upgrade_v1_crea_tasks_con_las_columnas_esperadas(migrated_db):
+    cfg = alembic_config()
+    v1 = _tasks_v1_revision_module()
+    # La migración de due_at (v2) ya está apilada en la cabeza real; se
+    # comprueba el esquema justo después de v1, no en head.
+    await asyncio.to_thread(command.downgrade, cfg, v1.down_revision)
+    await asyncio.to_thread(command.upgrade, cfg, v1.revision)
+
+    columns, foreign_keys = await _columnas_y_fks_de_tasks()
+
+    # Restaura la cabeza real para el resto de la sesión.
+    await asyncio.to_thread(command.upgrade, cfg, "head")
 
     assert set(columns.keys()) == {
         "id",
@@ -85,3 +109,31 @@ async def test_downgrade_deja_la_tabla_tasks_ausente(migrated_db):
     await asyncio.to_thread(command.upgrade, cfg, "head")
 
     assert existe is None
+
+
+async def test_upgrade_head_agrega_due_at_nulable(migrated_db):
+    columns, _ = await _columnas_y_fks_de_tasks()
+
+    assert "due_at" in columns
+    assert columns["due_at"] == "YES"
+
+
+async def test_downgrade_v2_deja_due_at_ausente_sin_tocar_el_resto(migrated_db):
+    cfg = alembic_config()
+    v2 = _tasks_v2_revision_module()
+    objetivo = v2.down_revision
+    await asyncio.to_thread(command.downgrade, cfg, objetivo)
+
+    columns, _ = await _columnas_y_fks_de_tasks()
+
+    # Restaura la cabeza real para el resto de la sesión.
+    await asyncio.to_thread(command.upgrade, cfg, "head")
+
+    assert "due_at" not in columns
+    assert set(columns.keys()) == {
+        "id",
+        "title",
+        "description",
+        "project_id",
+        "state_id",
+    }

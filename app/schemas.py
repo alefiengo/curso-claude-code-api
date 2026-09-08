@@ -5,8 +5,9 @@ Salida estricta: exactamente los campos que declara el contrato
 """
 
 import unicodedata
+from datetime import UTC, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 # Categorías Unicode "invisibles": si un título no deja ningún carácter fuera
 # de estas, se considera sin contenido visible (docs/contrato-api.md,
@@ -23,6 +24,22 @@ def _normalizar_title(value: str) -> str:
     if all(unicodedata.category(ch) in _CATEGORIAS_INVISIBLES for ch in value):
         raise ValueError("el título no tiene ningún carácter visible")
     return value
+
+
+def _normalizar_due_at(value: datetime | None) -> datetime | None:
+    """Exige zona horaria y normaliza a UTC. `None` significa "sin fecha"."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        raise ValueError("due_at debe incluir zona horaria")
+    return value.astimezone(UTC)
+
+
+def _serializar_due_at(value: datetime | None) -> str | None:
+    """Formato exacto del contrato: UTC, con `Z`, sin microsegundos."""
+    if value is None:
+        return None
+    return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class StateOut(BaseModel):
@@ -55,11 +72,17 @@ class TaskCreate(BaseModel):
     description: str | None = None
     project_id: int
     state_id: int
+    due_at: datetime | None = None
 
     @field_validator("title")
     @classmethod
     def _validar_title(cls, value: str) -> str:
         return _normalizar_title(value)
+
+    @field_validator("due_at")
+    @classmethod
+    def _validar_due_at(cls, value: datetime | None) -> datetime | None:
+        return _normalizar_due_at(value)
 
 
 class TaskUpdate(BaseModel):
@@ -69,6 +92,7 @@ class TaskUpdate(BaseModel):
     description: str | None = None
     project_id: int | None = None
     state_id: int | None = None
+    due_at: datetime | None = None
 
     @field_validator("title")
     @classmethod
@@ -91,6 +115,13 @@ class TaskUpdate(BaseModel):
             raise ValueError("state_id no puede ser nulo")
         return value
 
+    @field_validator("due_at")
+    @classmethod
+    def _validar_due_at(cls, value: datetime | None) -> datetime | None:
+        # A diferencia de title/project_id/state_id, due_at sí puede
+        # limpiarse con `null` explícito: es opcional en Task.
+        return _normalizar_due_at(value)
+
 
 class TaskOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
@@ -100,3 +131,8 @@ class TaskOut(BaseModel):
     description: str | None
     project_id: int
     state_id: int
+    due_at: datetime | None
+
+    @field_serializer("due_at")
+    def _serializar_due_at_campo(self, value: datetime | None) -> str | None:
+        return _serializar_due_at(value)

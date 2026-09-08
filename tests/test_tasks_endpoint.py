@@ -1,4 +1,4 @@
-"""Tests de los endpoints de Tareas v1 (sin `due_at`, sin `overdue`).
+"""Tests de los endpoints de Tareas (v1 y v2: `due_at`, `overdue`).
 
 Corren contra PostgreSQL (compose.yaml), app en memoria vía httpx.ASGITransport.
 Cada test corre en su propia transacción revertida (ver tests/conftest.py).
@@ -6,7 +6,14 @@ Cada test corre en su propia transacción revertida (ver tests/conftest.py).
 
 import httpx
 
-CODIGOS_ESTADO_V1 = {"id", "title", "description", "project_id", "state_id"}
+CODIGOS_TAREA = {
+    "id",
+    "title",
+    "description",
+    "project_id",
+    "state_id",
+    "due_at",
+}
 
 
 async def _crear_project(client: httpx.AsyncClient, name: str = "Casa") -> int:
@@ -15,6 +22,11 @@ async def _crear_project(client: httpx.AsyncClient, name: str = "Casa") -> int:
 
 async def _primer_state_id(client: httpx.AsyncClient) -> int:
     return (await client.get("/states")).json()[0]["id"]
+
+
+async def _state_id_por_code(client: httpx.AsyncClient, code: str) -> int:
+    estados = (await client.get("/states")).json()
+    return next(e["id"] for e in estados if e["code"] == code)
 
 
 async def test_post_tasks_valida_devuelve_201_con_esquema_exacto(
@@ -34,11 +46,12 @@ async def test_post_tasks_valida_devuelve_201_con_esquema_exacto(
 
     assert response.status_code == 201
     body = response.json()
-    assert set(body.keys()) == CODIGOS_ESTADO_V1
+    assert set(body.keys()) == CODIGOS_TAREA
     assert body["title"] == "Regar las plantas"
     assert body["description"] is None
     assert body["project_id"] == project_id
     assert body["state_id"] == state_id
+    assert body["due_at"] is None
 
 
 async def test_post_tasks_con_title_vacio_devuelve_422(
@@ -347,3 +360,181 @@ async def test_delete_task_inexistente_devuelve_404(
     response = await client.delete("/tasks/999999")
 
     assert response.status_code == 404
+
+
+async def test_post_tasks_con_due_at_con_zona_se_normaliza_a_utc(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+
+    response = await client.post(
+        "/tasks",
+        json={
+            "title": "Tarea",
+            "project_id": project_id,
+            "state_id": state_id,
+            "due_at": "2026-03-01T09:00:00-05:00",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["due_at"] == "2026-03-01T14:00:00Z"
+
+
+async def test_post_tasks_con_due_at_sin_zona_devuelve_422(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+
+    response = await client.post(
+        "/tasks",
+        json={
+            "title": "Tarea",
+            "project_id": project_id,
+            "state_id": state_id,
+            "due_at": "2026-03-01T09:00:00",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+async def test_patch_task_fija_due_at_sobre_tarea_sin_fecha(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+    creada = (
+        await client.post(
+            "/tasks",
+            json={"title": "Tarea", "project_id": project_id, "state_id": state_id},
+        )
+    ).json()
+    assert creada["due_at"] is None
+
+    response = await client.patch(
+        f"/tasks/{creada['id']}", json={"due_at": "2026-03-01T09:00:00Z"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["due_at"] == "2026-03-01T09:00:00Z"
+
+
+async def test_patch_task_con_due_at_null_lo_limpia(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+    creada = (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Tarea",
+                "project_id": project_id,
+                "state_id": state_id,
+                "due_at": "2026-03-01T09:00:00Z",
+            },
+        )
+    ).json()
+
+    response = await client.patch(f"/tasks/{creada['id']}", json={"due_at": None})
+
+    assert response.status_code == 200
+    assert response.json()["due_at"] is None
+
+
+async def test_get_tasks_overdue_incluye_solo_vencidas_y_no_hechas(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    pendiente_id = await _state_id_por_code(client, "PENDIENTE")
+    hecha_id = await _state_id_por_code(client, "HECHA")
+
+    vencida = (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Vencida",
+                "project_id": project_id,
+                "state_id": pendiente_id,
+                "due_at": "2020-01-01T00:00:00Z",
+            },
+        )
+    ).json()["id"]
+    futura = (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Futura",
+                "project_id": project_id,
+                "state_id": pendiente_id,
+                "due_at": "2099-01-01T00:00:00Z",
+            },
+        )
+    ).json()["id"]
+    vencida_pero_hecha = (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Vencida pero hecha",
+                "project_id": project_id,
+                "state_id": hecha_id,
+                "due_at": "2020-01-01T00:00:00Z",
+            },
+        )
+    ).json()["id"]
+    sin_fecha = (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Sin fecha",
+                "project_id": project_id,
+                "state_id": pendiente_id,
+            },
+        )
+    ).json()["id"]
+
+    response = await client.get("/tasks?overdue=true")
+
+    assert response.status_code == 200
+    ids_creados = {vencida, futura, vencida_pero_hecha, sin_fecha}
+    ids_overdue = {t["id"] for t in response.json() if t["id"] in ids_creados}
+    assert ids_overdue == {vencida}
+
+
+async def test_get_tasks_overdue_se_combina_con_project_id(
+    client: httpx.AsyncClient,
+) -> None:
+    project_a = await _crear_project(client, "A")
+    project_b = await _crear_project(client, "B")
+    pendiente_id = await _state_id_por_code(client, "PENDIENTE")
+
+    vencida_a = (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Vencida A",
+                "project_id": project_a,
+                "state_id": pendiente_id,
+                "due_at": "2020-01-01T00:00:00Z",
+            },
+        )
+    ).json()["id"]
+    (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Vencida B",
+                "project_id": project_b,
+                "state_id": pendiente_id,
+                "due_at": "2020-01-01T00:00:00Z",
+            },
+        )
+    ).json()["id"]
+
+    response = await client.get(f"/tasks?overdue=true&project_id={project_a}")
+
+    assert response.status_code == 200
+    assert [t["id"] for t in response.json()] == [vencida_a]

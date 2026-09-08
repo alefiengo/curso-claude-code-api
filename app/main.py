@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -105,6 +106,7 @@ async def create_task(payload: TaskCreate, session: SessionDep) -> Task:
         description=payload.description,
         project_id=payload.project_id,
         state_id=payload.state_id,
+        due_at=payload.due_at,
     )
     session.add(task)
     await session.commit()
@@ -117,12 +119,23 @@ async def list_tasks(
     session: SessionDep,
     project_id: int | None = None,
     state_id: int | None = None,
+    overdue: bool = False,
 ) -> list[Task]:
     query = select(Task).order_by(Task.id)
     if project_id is not None:
         query = query.where(Task.project_id == project_id)
     if state_id is not None:
         query = query.where(Task.state_id == state_id)
+    if overdue:
+        # Vencida: due_at pasado y estado distinto de HECHA. Se compara por
+        # code, no por un state_id fijo (docs/plan-tareas.md, "Decisiones
+        # tomadas"). Una tarea sin due_at nunca está vencida.
+        query = (
+            query.join(State, Task.state_id == State.id)
+            .where(Task.due_at.is_not(None))
+            .where(Task.due_at < datetime.now(UTC))
+            .where(State.code != "HECHA")
+        )
     result = await session.execute(query)
     return list(result.scalars().all())
 
