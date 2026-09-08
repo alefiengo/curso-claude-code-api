@@ -5,7 +5,9 @@ crean las migraciones; estos modelos describen las tablas para consultarlas
 desde la app.
 """
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from datetime import datetime
+
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -34,7 +36,7 @@ class Project(Base):
 
 
 class Task(Base):
-    """Tarea v1. Sin `due_at`: eso llega con la migración de v2."""
+    """Tarea. `due_at` (v2) es opcional; se guarda ya normalizada a UTC."""
 
     __tablename__ = "tasks"
 
@@ -45,3 +47,6 @@ class Task(Base):
         ForeignKey("projects.id"), nullable=False
     )
     state_id: Mapped[int] = mapped_column(ForeignKey("states.id"), nullable=False)
+    due_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

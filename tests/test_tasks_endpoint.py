@@ -1,4 +1,4 @@
-"""Tests de los endpoints de Tareas v1 (sin `due_at`, sin `overdue`).
+"""Tests de los endpoints de Tareas (v1 y v2: `due_at`, `overdue`).
 
 Corren contra PostgreSQL (compose.yaml), app en memoria vía httpx.ASGITransport.
 Cada test corre en su propia transacción revertida (ver tests/conftest.py).
@@ -6,7 +6,14 @@ Cada test corre en su propia transacción revertida (ver tests/conftest.py).
 
 import httpx
 
-CODIGOS_ESTADO_V1 = {"id", "title", "description", "project_id", "state_id"}
+CODIGOS_TAREA = {
+    "id",
+    "title",
+    "description",
+    "project_id",
+    "state_id",
+    "due_at",
+}
 
 
 async def _crear_project(client: httpx.AsyncClient, name: str = "Casa") -> int:
@@ -34,11 +41,12 @@ async def test_post_tasks_valida_devuelve_201_con_esquema_exacto(
 
     assert response.status_code == 201
     body = response.json()
-    assert set(body.keys()) == CODIGOS_ESTADO_V1
+    assert set(body.keys()) == CODIGOS_TAREA
     assert body["title"] == "Regar las plantas"
     assert body["description"] is None
     assert body["project_id"] == project_id
     assert body["state_id"] == state_id
+    assert body["due_at"] is None
 
 
 async def test_post_tasks_con_title_vacio_devuelve_422(
@@ -347,3 +355,86 @@ async def test_delete_task_inexistente_devuelve_404(
     response = await client.delete("/tasks/999999")
 
     assert response.status_code == 404
+
+
+async def test_post_tasks_con_due_at_con_zona_se_normaliza_a_utc(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+
+    response = await client.post(
+        "/tasks",
+        json={
+            "title": "Tarea",
+            "project_id": project_id,
+            "state_id": state_id,
+            "due_at": "2026-03-01T09:00:00-05:00",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["due_at"] == "2026-03-01T14:00:00Z"
+
+
+async def test_post_tasks_con_due_at_sin_zona_devuelve_422(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+
+    response = await client.post(
+        "/tasks",
+        json={
+            "title": "Tarea",
+            "project_id": project_id,
+            "state_id": state_id,
+            "due_at": "2026-03-01T09:00:00",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+async def test_patch_task_fija_due_at_sobre_tarea_sin_fecha(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+    creada = (
+        await client.post(
+            "/tasks",
+            json={"title": "Tarea", "project_id": project_id, "state_id": state_id},
+        )
+    ).json()
+    assert creada["due_at"] is None
+
+    response = await client.patch(
+        f"/tasks/{creada['id']}", json={"due_at": "2026-03-01T09:00:00Z"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["due_at"] == "2026-03-01T09:00:00Z"
+
+
+async def test_patch_task_con_due_at_null_lo_limpia(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+    creada = (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Tarea",
+                "project_id": project_id,
+                "state_id": state_id,
+                "due_at": "2026-03-01T09:00:00Z",
+            },
+        )
+    ).json()
+
+    response = await client.patch(f"/tasks/{creada['id']}", json={"due_at": None})
+
+    assert response.status_code == 200
+    assert response.json()["due_at"] is None
