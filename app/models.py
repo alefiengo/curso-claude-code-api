@@ -50,3 +50,4 @@ class Task(Base):
     due_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    priority: Mapped[int | None] = mapped_column(Integer, nullable=True)

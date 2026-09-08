@@ -1,4 +1,4 @@
-"""Tests de la migración de la tabla `tasks` (Tareas v1 y v2 `due_at`).
+"""Tests de la migración de la tabla `tasks` (Tareas v1, v2 `due_at`, `priority`).
 
 Corren contra PostgreSQL (compose.yaml). Como `projects`, sin seed: solo se
 verifica el esquema.
@@ -31,6 +31,15 @@ def _tasks_v2_revision_module():
         if "agrega due_at a tasks" in (rev.doc or "").lower():
             return rev.module
     raise AssertionError("no se encontró la revisión que agrega due_at")
+
+
+def _tasks_priority_revision_module():
+    """Carga el módulo de la revisión que agrega `priority` a `tasks`."""
+    script = ScriptDirectory.from_config(alembic_config())
+    for rev in script.walk_revisions():
+        if "agrega priority a tasks" in (rev.doc or "").lower():
+            return rev.module
+    raise AssertionError("no se encontró la revisión que agrega priority")
 
 
 async def _columnas_y_fks_de_tasks() -> tuple[dict[str, str], dict[str, str]]:
@@ -136,4 +145,33 @@ async def test_downgrade_v2_deja_due_at_ausente_sin_tocar_el_resto(migrated_db):
         "description",
         "project_id",
         "state_id",
+    }
+
+
+async def test_upgrade_head_agrega_priority_nulable(migrated_db):
+    columns, _ = await _columnas_y_fks_de_tasks()
+
+    assert "priority" in columns
+    assert columns["priority"] == "YES"
+
+
+async def test_downgrade_priority_deja_ausente_sin_tocar_el_resto(migrated_db):
+    cfg = alembic_config()
+    objetivo = _tasks_priority_revision_module().down_revision
+    await asyncio.to_thread(command.downgrade, cfg, objetivo)
+
+    columns, _ = await _columnas_y_fks_de_tasks()
+
+    # Restaura la cabeza real para el resto de la sesión.
+    await asyncio.to_thread(command.upgrade, cfg, "head")
+
+    assert "priority" not in columns
+    assert "due_at" in columns
+    assert set(columns.keys()) == {
+        "id",
+        "title",
+        "description",
+        "project_id",
+        "state_id",
+        "due_at",
     }

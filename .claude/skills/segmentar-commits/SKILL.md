@@ -62,9 +62,10 @@ Reglas para dividir:
   fragilidad expuesta por otro cambio es `fix`, aunque el archivo sea de
   tests. Un commit que solo toca `docs/` es `docs`.
 - **Staging parcial solo si hace falta.** Un archivo se reparte entre varios
-  commits (`git add -p`, o líneas/hunks concretos) únicamente cuando de
-  verdad mezcla más de una intención. Si el archivo completo pertenece a un
-  solo commit, no lo fracciones.
+  commits únicamente cuando de verdad mezcla más de una intención. Si el
+  archivo completo pertenece a un solo commit, no lo fracciones. El reparto
+  parcial se hace siempre con `git add -p` sobre el cambio que ya existe en
+  el árbol de trabajo — nunca editando el archivo.
 
 ## Fase 3 — Propuesta y espera
 
@@ -86,7 +87,21 @@ vuelve a mostrarlo antes de continuar.
 
 Para cada commit aprobado, en el orden propuesto:
 
-1. Deja en stage exactamente lo propuesto (archivo completo o `git add -p`).
+1. Deja en stage exactamente lo propuesto, siempre a partir del cambio que
+   ya existe en el árbol de trabajo:
+   - Archivo completo: `git add <archivo>`.
+   - Parte de un archivo: `git add -p <archivo>`, aceptando o rechazando
+     hunks. Si un hunk mezcla líneas de más de un commit, no lo aceptes
+     entero: usa la opción `e` (editar manualmente) de `git add -p` para
+     dejar en el hunk que se comitea solo las líneas de esta intención,
+     conservando las demás para un commit posterior.
+   - Archivo nuevo que hay que repartir entre varios commits:
+     `git add -N <archivo>` primero (lo deja rastreado sin contenido en el
+     índice), y recién ahí `git add -p <archivo>` como con cualquier otro.
+   - Nunca uses Edit/Write ni ninguna otra vía para modificar el contenido
+     del archivo en el árbol de trabajo con el fin de simular un estado
+     intermedio: el archivo en disco no se toca en ningún momento de esta
+     fase; todo el reparto ocurre en el índice.
 2. `git diff --cached --stat` para confirmar que el stage coincide con lo
    propuesto antes de comitear.
 3. Corre la comprobación canónica que aplique a ese commit.
@@ -98,6 +113,10 @@ Para cada commit aprobado, en el orden propuesto:
 
 - No reescribe historia (`rebase`, `amend`) ni combina con commits ya
   existentes.
+- No reescribe código para armar un commit. Cada commit sale exclusivamente
+  de `git add` (completo o `-p`, con edición manual de hunks cuando haga
+  falta) sobre el cambio que ya existe en el árbol de trabajo. El contenido
+  de los archivos en disco no se toca en ningún momento de la Fase 4.
 - No decide el reparto sin mostrarlo antes ni comitea sin aprobación
   explícita, commit por commit.
 - No inventa contenido: el reparto sale de lo que `git status` / `git diff`

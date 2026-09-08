@@ -73,6 +73,7 @@ class TaskCreate(BaseModel):
     project_id: int
     state_id: int
     due_at: datetime | None = None
+    priority: int | None = None
 
     @field_validator("title")
     @classmethod
@@ -93,6 +94,7 @@ class TaskUpdate(BaseModel):
     project_id: int | None = None
     state_id: int | None = None
     due_at: datetime | None = None
+    priority: int | None = None
 
     @field_validator("title")
     @classmethod
@@ -132,6 +134,7 @@ class TaskOut(BaseModel):
     project_id: int
     state_id: int
     due_at: datetime | None
+    priority: int | None
 
     @field_serializer("due_at")
     def _serializar_due_at_campo(self, value: datetime | None) -> str | None:

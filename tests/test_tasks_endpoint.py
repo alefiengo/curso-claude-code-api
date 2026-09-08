@@ -13,6 +13,7 @@ CODIGOS_TAREA = {
     "project_id",
     "state_id",
     "due_at",
+    "priority",
 }
 
 
@@ -52,6 +53,7 @@ async def test_post_tasks_valida_devuelve_201_con_esquema_exacto(
     assert body["project_id"] == project_id
     assert body["state_id"] == state_id
     assert body["due_at"] is None
+    assert body["priority"] is None
 
 
 async def test_post_tasks_con_title_vacio_devuelve_422(
@@ -538,3 +540,84 @@ async def test_get_tasks_overdue_se_combina_con_project_id(
 
     assert response.status_code == 200
     assert [t["id"] for t in response.json()] == [vencida_a]
+
+
+async def test_post_tasks_con_priority_la_conserva(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+
+    response = await client.post(
+        "/tasks",
+        json={
+            "title": "Tarea",
+            "project_id": project_id,
+            "state_id": state_id,
+            "priority": 3,
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["priority"] == 3
+
+
+async def test_post_tasks_con_priority_no_entero_devuelve_422(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+
+    response = await client.post(
+        "/tasks",
+        json={
+            "title": "Tarea",
+            "project_id": project_id,
+            "state_id": state_id,
+            "priority": "alta",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+async def test_patch_task_fija_priority_sobre_tarea_sin_prioridad(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+    creada = (
+        await client.post(
+            "/tasks",
+            json={"title": "Tarea", "project_id": project_id, "state_id": state_id},
+        )
+    ).json()
+    assert creada["priority"] is None
+
+    response = await client.patch(f"/tasks/{creada['id']}", json={"priority": 1})
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == 1
+
+
+async def test_patch_task_con_priority_null_lo_limpia(
+    client: httpx.AsyncClient,
+) -> None:
+    project_id = await _crear_project(client)
+    state_id = await _primer_state_id(client)
+    creada = (
+        await client.post(
+            "/tasks",
+            json={
+                "title": "Tarea",
+                "project_id": project_id,
+                "state_id": state_id,
+                "priority": 2,
+            },
+        )
+    ).json()
+
+    response = await client.patch(f"/tasks/{creada['id']}", json={"priority": None})
+
+    assert response.status_code == 200
+    assert response.json()["priority"] is None
