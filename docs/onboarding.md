@@ -1,5 +1,10 @@
 # Mapa de onboarding — TaskFlow API
 
+> Desactualizado desde la Sesión 3: describe el repositorio cuando solo existía
+> `GET /health`. Para el estado vigente, ver los planes en `docs/`, el historial
+> de commits y el propio código; este mapa se conserva como registro de esa
+> sesión.
+
 Guía breve para ubicarse en el repositorio. Cada hecho cita archivo y línea.
 Se separan hechos, inferencias y desconocidos.
 
