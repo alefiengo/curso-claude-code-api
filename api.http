@@ -1,0 +1,237 @@
+### TaskFlow API — recorrido del contrato (docs/contrato-api.md)
+###
+### Las peticiones están ordenadas para poder ejecutarse de arriba abajo:
+### cada una que crea un recurso deja su id en una variable que usan las
+### siguientes. Ejecuta primero "crea proyecto base" y "crea tarea base"
+### antes de los casos que dependen de ellas.
+###
+### Requiere la API corriendo: uv run uvicorn app.main:app --reload
+
+@baseUrl = http://127.0.0.1:8000
+
+
+### Salud
+
+### GET /health -> 200 {"status": "ok"}
+GET {{baseUrl}}/health
+
+
+### Estados
+
+### GET /states -> 200, lista ordenada por el campo de orden del catálogo
+GET {{baseUrl}}/states
+
+
+### Proyectos
+
+### POST /projects -> 201; proyecto base para el resto del recorrido
+# @name proyectoBase
+POST {{baseUrl}}/projects
+Content-Type: application/json
+
+{
+  "name": "Casa",
+  "description": "Tareas del hogar"
+}
+
+###
+@proyectoBaseId = {{proyectoBase.response.body.id}}
+
+### POST /projects -> 201; segundo proyecto, para reasignar una tarea por PATCH
+# @name proyectoSecundario
+POST {{baseUrl}}/projects
+Content-Type: application/json
+
+{
+  "name": "Oficina"
+}
+
+###
+@proyectoSecundarioId = {{proyectoSecundario.response.body.id}}
+
+### POST /projects -> 201; proyecto que se borrará al final (204)
+# @name proyectoEfimero
+POST {{baseUrl}}/projects
+Content-Type: application/json
+
+{
+  "name": "Temporal"
+}
+
+###
+@proyectoEfimeroId = {{proyectoEfimero.response.body.id}}
+
+### GET /projects -> 200, lista por id ascendente
+GET {{baseUrl}}/projects
+
+### GET /projects/{id} -> 200
+GET {{baseUrl}}/projects/{{proyectoBaseId}}
+
+### PATCH /projects/{id} -> 200, actualización parcial
+PATCH {{baseUrl}}/projects/{{proyectoBaseId}}
+Content-Type: application/json
+
+{
+  "description": "Tareas del hogar y del jardín"
+}
+
+### Error: GET /projects/{id} con id inexistente -> 404
+GET {{baseUrl}}/projects/999999
+
+### Error: POST /projects con name vacío -> 422
+POST {{baseUrl}}/projects
+Content-Type: application/json
+
+{
+  "name": ""
+}
+
+
+### Tareas v1
+
+### POST /tasks -> 201; tarea base (state_id 1 = PENDIENTE, del catálogo sembrado)
+# @name tareaBase
+POST {{baseUrl}}/tasks
+Content-Type: application/json
+
+{
+  "title": "Regar las plantas",
+  "description": null,
+  "project_id": {{proyectoBaseId}},
+  "state_id": 1
+}
+
+###
+@tareaBaseId = {{tareaBase.response.body.id}}
+
+### POST /tasks -> 201; segunda tarea, para filtros por state_id
+# @name tareaEnCurso
+POST {{baseUrl}}/tasks
+Content-Type: application/json
+
+{
+  "title": "Pintar la cerca",
+  "project_id": {{proyectoBaseId}},
+  "state_id": 2
+}
+
+###
+@tareaEnCursoId = {{tareaEnCurso.response.body.id}}
+
+### GET /tasks -> 200, todas, por id ascendente
+GET {{baseUrl}}/tasks
+
+### GET /tasks?project_id= -> 200, filtro solo por proyecto
+GET {{baseUrl}}/tasks?project_id={{proyectoBaseId}}
+
+### GET /tasks?state_id= -> 200, filtro solo por estado
+GET {{baseUrl}}/tasks?state_id=1
+
+### GET /tasks?project_id=&state_id= -> 200, filtros combinados
+GET {{baseUrl}}/tasks?project_id={{proyectoBaseId}}&state_id=1
+
+### GET /tasks/{id} -> 200
+GET {{baseUrl}}/tasks/{{tareaBaseId}}
+
+### PATCH /tasks/{id} -> 200, actualización parcial consistente (reasigna de proyecto)
+PATCH {{baseUrl}}/tasks/{{tareaEnCursoId}}
+Content-Type: application/json
+
+{
+  "project_id": {{proyectoSecundarioId}}
+}
+
+### Error: GET /tasks/{id} con id inexistente -> 404
+GET {{baseUrl}}/tasks/999999
+
+### Error: POST /tasks con title de solo espacios -> 422
+POST {{baseUrl}}/tasks
+Content-Type: application/json
+
+{
+  "title": "   ",
+  "project_id": {{proyectoBaseId}},
+  "state_id": 1
+}
+
+### Error: POST /tasks con project_id inexistente -> 404
+POST {{baseUrl}}/tasks
+Content-Type: application/json
+
+{
+  "title": "Huérfana",
+  "project_id": 999999,
+  "state_id": 1
+}
+
+### Error: POST /tasks con state_id inexistente -> 404
+POST {{baseUrl}}/tasks
+Content-Type: application/json
+
+{
+  "title": "Sin estado",
+  "project_id": {{proyectoBaseId}},
+  "state_id": 999999
+}
+
+
+### Tareas v2: Fechas Límite y Prioridad
+
+### POST /tasks -> 201; due_at con zona, se normaliza a UTC ("...T14:00:00Z")
+# @name tareaVencida
+POST {{baseUrl}}/tasks
+Content-Type: application/json
+
+{
+  "title": "Entregar informe",
+  "project_id": {{proyectoBaseId}},
+  "state_id": 1,
+  "due_at": "2020-01-01T09:00:00-05:00",
+  "priority": 3
+}
+
+###
+@tareaVencidaId = {{tareaVencida.response.body.id}}
+
+### GET /tasks?overdue=true -> 200, solo tareas con due_at pasado y estado != HECHA
+GET {{baseUrl}}/tasks?overdue=true
+
+### GET /tasks?overdue=true&project_id= -> 200, overdue combinado con otro filtro
+GET {{baseUrl}}/tasks?overdue=true&project_id={{proyectoBaseId}}
+
+### PATCH /tasks/{id} -> 200, limpia due_at con null explícito
+PATCH {{baseUrl}}/tasks/{{tareaVencidaId}}
+Content-Type: application/json
+
+{
+  "due_at": null
+}
+
+### Error: POST /tasks con due_at sin zona horaria -> 422
+POST {{baseUrl}}/tasks
+Content-Type: application/json
+
+{
+  "title": "Fecha ambigua",
+  "project_id": {{proyectoBaseId}},
+  "state_id": 1,
+  "due_at": "2026-03-01T09:00:00"
+}
+
+
+### Borrado (al final: consume los recursos creados arriba)
+
+### DELETE /projects/{id} -> 409, el proyecto base tiene tareas asociadas
+DELETE {{baseUrl}}/projects/{{proyectoBaseId}}
+
+### DELETE /tasks/{id} -> 204 sin cuerpo
+DELETE {{baseUrl}}/tasks/{{tareaBaseId}}
+
+### Error: DELETE /tasks/{id} con id inexistente -> 404
+DELETE {{baseUrl}}/tasks/999999
+
+### DELETE /projects/{id} -> 204; el proyecto efímero nunca tuvo tareas
+DELETE {{baseUrl}}/projects/{{proyectoEfimeroId}}
+
+### Error: DELETE /projects/{id} con id inexistente -> 404
+DELETE {{baseUrl}}/projects/999999
