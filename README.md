@@ -1,10 +1,11 @@
 # TaskFlow API
 
-Base de la API de TaskFlow: FastAPI administrada con [uv](https://docs.astral.sh/uv/)
-y Python 3.12.
+API de TaskFlow: FastAPI sobre PostgreSQL, administrada con
+[uv](https://docs.astral.sh/uv/) y Python 3.12.
 
-En esta entrega solo existe `GET /health`. El resto del
-[contrato](docs/contrato-api.md) se implementa en sesiones posteriores.
+El comportamiento observable de la API está fijado en
+[`docs/contrato-api.md`](docs/contrato-api.md). Las peticiones de ejemplo, una
+por método y ruta, están en [`api.http`](api.http).
 
 ## Requisitos
 
@@ -12,69 +13,67 @@ En esta entrega solo existe `GET /health`. El resto del
 - uv.
 - Docker con el plugin Compose.
 
-## Recorrido
+## Puesta en marcha
 
 Todos los comandos se ejecutan desde la raíz del repositorio.
 
-### 1. Instalar dependencias
+1. Instala las dependencias:
 
-```bash
-uv sync --frozen
-```
+   ```bash
+   uv sync --frozen
+   ```
 
-### 2. Ejecutar los tests
+2. Copia la plantilla de variables de entorno:
 
-```bash
-uv run pytest -q
-```
+   ```bash
+   cp .env.example .env
+   ```
 
-### 3. Pasar el linter
+3. Levanta PostgreSQL y espera a que su healthcheck pase a `healthy`:
 
-```bash
-uv run ruff check .
-```
+   ```bash
+   docker compose up -d
+   ```
 
-### 4. Levantar PostgreSQL
+4. Aplica las migraciones (crea el esquema y siembra el catálogo de estados):
 
-```bash
-docker compose up -d
-```
+   ```bash
+   uv run alembic upgrade head
+   ```
 
-El servicio `db` (PostgreSQL 18-alpine) queda disponible cuando su healthcheck
-pasa a `healthy`. `compose.yaml` trae valores por defecto locales, así que
-funciona sin `.env`. Para personalizarlo, copia `.env.example` a `.env`.
+5. Arranca la API en `http://127.0.0.1:8000`:
 
-### 5. Aplicar las migraciones
+   ```bash
+   uv run uvicorn app.main:app --reload
+   ```
 
-Con PostgreSQL levantado:
+6. Comprueba que responde:
 
-```bash
-uv run alembic upgrade head
-```
+   ```bash
+   curl http://127.0.0.1:8000/health
+   # {"status":"ok"}
+   ```
 
-Para revertir al estado inicial:
+7. Prueba el resto de endpoints ejecutando los bloques de
+   [`api.http`](api.http) de arriba abajo, con la extensión REST Client de VS
+   Code o cualquier cliente compatible.
 
-```bash
-uv run alembic downgrade base
-```
+## Parar
 
-La URL de conexión se toma de `DATABASE_URL` (ver `.env.example`).
+- Detén la API con Ctrl-C sobre el proceso de uvicorn.
+- Detén PostgreSQL:
 
-### 6. Arrancar la API
+  ```bash
+  docker compose down
+  ```
 
-```bash
-uv run uvicorn app.main:app --reload
-```
+## Desarrollo
 
-Comprobar la salud:
+| Acción | Comando |
+|---|---|
+| Ejecutar los tests | `uv run pytest -q` |
+| Pasar el linter | `uv run ruff check .` |
+| Revertir todas las migraciones | `uv run alembic downgrade base` |
 
-```bash
-curl http://127.0.0.1:8000/health
-# {"status":"ok"}
-```
-
-### 7. Detener PostgreSQL
-
-```bash
-docker compose down
-```
+Los tests de persistencia corren contra la instancia de PostgreSQL de
+`docker compose`; tenla levantada antes de `uv run pytest -q`.
