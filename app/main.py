@@ -18,7 +18,7 @@ from app.schemas import (
     TaskUpdate,
 )
 
-app = FastAPI(title="TaskFlow API")
+app = FastAPI(title="TaskFlow API", version="1.0.0")
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
