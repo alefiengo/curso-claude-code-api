@@ -29,7 +29,10 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
-@app.get("/health")
+@app.get(
+    "/health",
+    description="Sonda de salud del servicio. No consulta la base de datos.",
+)
 async def health() -> dict[str, str]:
     return {"status": "ok"}
 
