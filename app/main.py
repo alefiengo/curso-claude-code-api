@@ -37,7 +37,11 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/states", response_model=list[StateOut])
+@app.get(
+    "/states",
+    response_model=list[StateOut],
+    description="Catálogo cerrado de estados de tarea. Solo lectura.",
+)
 async def list_states(session: SessionDep) -> list[State]:
     # Orden por el campo de catálogo, con id como desempate
     # (docs/contrato-api.md, "Orden de las listas").

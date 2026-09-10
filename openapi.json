@@ -8,6 +8,7 @@
     "/health": {
       "get": {
         "summary": "Health",
+        "description": "Sonda de salud del servicio. No consulta la base de datos.",
         "operationId": "health_health_get",
         "responses": {
           "200": {
@@ -30,6 +31,7 @@
     "/states": {
       "get": {
         "summary": "List States",
+        "description": "Catálogo cerrado de estados de tarea. Solo lectura.",
         "operationId": "list_states_states_get",
         "responses": {
           "200": {
