@@ -74,6 +74,7 @@ Todos los comandos se ejecutan desde la raíz del repositorio.
 | Ejecutar los tests | `uv run pytest -q` |
 | Pasar el linter | `uv run ruff check .` |
 | Revertir todas las migraciones | `uv run alembic downgrade base` |
+| Regenerar `openapi.json` | `uv run python -c "import json, sys; from app.main import app; json.dump(app.openapi(), sys.stdout, indent=2, ensure_ascii=False); print()" > openapi.json` |
 
 Los tests de persistencia corren contra la instancia de PostgreSQL de
 `docker compose`; tenla levantada antes de `uv run pytest -q`.

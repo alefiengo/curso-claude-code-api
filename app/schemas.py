@@ -6,8 +6,28 @@ Salida estricta: exactamente los campos que declara el contrato
 
 import unicodedata
 from datetime import UTC, datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    WithJsonSchema,
+    field_serializer,
+    field_validator,
+)
+
+# `due_at` se serializa a texto con `_serializar_due_at`, lo que haría que el
+# esquema de salida perdiera el `format: date-time` que sí tiene la entrada.
+# `WithJsonSchema` lo vuelve a fijar para que openapi.json describa la fecha
+# de salida igual que la de entrada (docs/contrato-api.md, "Esquemas de
+# Respuesta").
+DueAtOut = Annotated[
+    datetime | None,
+    WithJsonSchema(
+        {"anyOf": [{"type": "string", "format": "date-time"}, {"type": "null"}]}
+    ),
+]
 
 # Categorías Unicode "invisibles": si un título no deja ningún carácter fuera
 # de estas, se considera sin contenido visible (docs/contrato-api.md,
@@ -133,7 +153,7 @@ class TaskOut(BaseModel):
     description: str | None
     project_id: int
     state_id: int
-    due_at: datetime | None
+    due_at: DueAtOut
     priority: int | None
 
     @field_serializer("due_at")

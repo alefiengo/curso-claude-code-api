@@ -18,7 +18,7 @@ from app.schemas import (
     TaskUpdate,
 )
 
-app = FastAPI(title="TaskFlow API")
+app = FastAPI(title="TaskFlow API", version="1.0.0")
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
@@ -34,7 +34,11 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/states", response_model=list[StateOut])
+@app.get(
+    "/states",
+    response_model=list[StateOut],
+    description="Catálogo cerrado de estados de tarea. Solo lectura, sin paginación ni filtros.",
+)
 async def list_states(session: SessionDep) -> list[State]:
     # Orden por el campo de catálogo, con id como desempate
     # (docs/contrato-api.md, "Orden de las listas").
