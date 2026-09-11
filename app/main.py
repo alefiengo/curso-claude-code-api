@@ -37,7 +37,7 @@ async def health() -> dict[str, str]:
 @app.get(
     "/states",
     response_model=list[StateOut],
-    description="Catálogo cerrado de estados de tarea. Solo lectura.",
+    description="Catálogo cerrado de estados de tarea. Solo lectura, sin paginación ni filtros.",
 )
 async def list_states(session: SessionDep) -> list[State]:
     # Orden por el campo de catálogo, con id como desempate

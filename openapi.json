@@ -30,7 +30,7 @@
     "/states": {
       "get": {
         "summary": "List States",
-        "description": "Catálogo cerrado de estados de tarea. Solo lectura.",
+        "description": "Catálogo cerrado de estados de tarea. Solo lectura, sin paginación ni filtros.",
         "operationId": "list_states_states_get",
         "responses": {
           "200": {
