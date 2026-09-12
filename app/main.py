@@ -2,11 +2,17 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import async_session
+from app.errors import (
+    EstadoNoEncontrado,
+    ProyectoConTareasAsociadas,
+    ProyectoNoEncontrado,
+    TareaNoEncontrada,
+)
 from app.models import Project, State, Task
 from app.schemas import (
     ProjectCreate,
@@ -65,7 +71,7 @@ async def list_projects(session: SessionDep) -> list[Project]:
 async def get_project(project_id: int, session: SessionDep) -> Project:
     project = await session.get(Project, project_id)
     if project is None:
-        raise HTTPException(status_code=404, detail="proyecto no encontrado")
+        raise ProyectoNoEncontrado()
     return project
 
 
@@ -75,7 +81,7 @@ async def update_project(
 ) -> Project:
     project = await session.get(Project, project_id)
     if project is None:
-        raise HTTPException(status_code=404, detail="proyecto no encontrado")
+        raise ProyectoNoEncontrado()
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(project, field, value)
     await session.commit()
@@ -87,14 +93,12 @@ async def update_project(
 async def delete_project(project_id: int, session: SessionDep) -> None:
     project = await session.get(Project, project_id)
     if project is None:
-        raise HTTPException(status_code=404, detail="proyecto no encontrado")
+        raise ProyectoNoEncontrado()
     tiene_tareas = await session.scalar(
         select(Task.id).where(Task.project_id == project_id).limit(1)
     )
     if tiene_tareas is not None:
-        raise HTTPException(
-            status_code=409, detail="el proyecto tiene tareas asociadas"
-        )
+        raise ProyectoConTareasAsociadas()
     await session.delete(project)
     await session.commit()
 
@@ -102,9 +106,9 @@ async def delete_project(project_id: int, session: SessionDep) -> None:
 @app.post("/tasks", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
 async def create_task(payload: TaskCreate, session: SessionDep) -> Task:
     if await session.get(Project, payload.project_id) is None:
-        raise HTTPException(status_code=404, detail="proyecto no encontrado")
+        raise ProyectoNoEncontrado()
     if await session.get(State, payload.state_id) is None:
-        raise HTTPException(status_code=404, detail="estado no encontrado")
+        raise EstadoNoEncontrado()
     task = Task(
         title=payload.title,
         description=payload.description,
@@ -149,7 +153,7 @@ async def list_tasks(
 async def get_task(task_id: int, session: SessionDep) -> Task:
     task = await session.get(Task, task_id)
     if task is None:
-        raise HTTPException(status_code=404, detail="tarea no encontrada")
+        raise TareaNoEncontrada()
     return task
 
 
@@ -157,14 +161,14 @@ async def get_task(task_id: int, session: SessionDep) -> Task:
 async def update_task(task_id: int, payload: TaskUpdate, session: SessionDep) -> Task:
     task = await session.get(Task, task_id)
     if task is None:
-        raise HTTPException(status_code=404, detail="tarea no encontrada")
+        raise TareaNoEncontrada()
     changes = payload.model_dump(exclude_unset=True)
     if "project_id" in changes:
         if await session.get(Project, changes["project_id"]) is None:
-            raise HTTPException(status_code=404, detail="proyecto no encontrado")
+            raise ProyectoNoEncontrado()
     if "state_id" in changes:
         if await session.get(State, changes["state_id"]) is None:
-            raise HTTPException(status_code=404, detail="estado no encontrado")
+            raise EstadoNoEncontrado()
     for field, value in changes.items():
         setattr(task, field, value)
     await session.commit()
@@ -176,6 +180,6 @@ async def update_task(task_id: int, payload: TaskUpdate, session: SessionDep) ->
 async def delete_task(task_id: int, session: SessionDep) -> None:
     task = await session.get(Task, task_id)
     if task is None:
-        raise HTTPException(status_code=404, detail="tarea no encontrada")
+        raise TareaNoEncontrada()
     await session.delete(task)
     await session.commit()
